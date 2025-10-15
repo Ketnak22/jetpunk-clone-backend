@@ -1,6 +1,8 @@
 import express from 'express';
 import multer from 'multer';
-import { readFileSync } from 'fs'
+import path from 'path';
+
+import { addMapToDb } from '../db.ts';
 
 const router = express.Router();
 const upload = multer({ dest: "uploads/" });
@@ -11,42 +13,34 @@ type IdPathMapping = {
 
 type TableList = Array<string>;
 
-interface ReceivedJSON {
-    name: string;
-    data: IdPathMapping | TableList;
-}
-
-interface StoredJSON {
-    name: string;
-    id: string;
-}
-
 router.post("/uploadMap", upload.any(), (req, res) => {
-    // Access JSON data and SVG file
-    const files = req.files as Express.Multer.File[]; // Type assertion
-
+    const files = req.files as Express.Multer.File[];
+    
     const svgFile = files ? files.find(file => file.mimetype === 'image/svg+xml') : null;
     const pathIdMapping = files ? files.find(file => file.mimetype === 'application/json') : null;
 
-    console.log(files)
+    const name = req.body.name as string | null;
+
+    if (!name) {
+        return res.status(400).send("Name is required.");
+    }
+
     if (!svgFile) {
         return res.status(400).send("SVG file is required.");
     }
 
-    // Read and parse the JSON file if it exists
-    let pathIdMappingContent: ReceivedJSON | null = null;
-    if (pathIdMapping) {
-        try {
-            const data = readFileSync(pathIdMapping.path, 'utf8');
-            pathIdMappingContent = JSON.parse(data) as ReceivedJSON;
-            console.log('Received path ID mapping:', pathIdMappingContent);
-        } catch (err) {
-            console.error('Error reading or parsing path ID mapping:', err);
-        }
-    } else {
-        console.log('No path ID mapping file uploaded.');
+    if (!pathIdMapping) {
+        return res.status(400).send("JSON file is required.");
     }
-    console.log('Received SVG file:', svgFile);
+
+    const svgFilename = path.parse(svgFile.filename).name;
+    let jsonFilename = path.parse(pathIdMapping?.filename).name;
+
+    addMapToDb(name, jsonFilename, svgFilename);
+
+    console.log('SVG filename:', svgFilename);
+    console.log('JSON filename:', jsonFilename);
+    console.log("Name:", name);
 
     res.status(200).send('OK');
 });
